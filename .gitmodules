@@ -1,0 +1,3 @@
+[submodule "mbed-os"]
+	path = mbed-os
+	url = https://github.com/iut-de-cachan-geii1/mbed-os.git
