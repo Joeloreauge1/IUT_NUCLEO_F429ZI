@@ -7,5 +7,8 @@
       ],
     "cmake.configureOnOpen": false,
     "git.autofetch": true,
-    "C_Cpp.default.browse.databaseFilename": "${workspaceFolder}/.vscode/.BROWSE.VC.DB"
+    "C_Cpp.default.browse.databaseFilename": "${workspaceFolder}/.vscode/.BROWSE.VC.DB",
+    "files.associations": {
+      "chrono": "cpp"
+    }
 }
