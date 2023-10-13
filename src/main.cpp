@@ -4,51 +4,125 @@
 #include "mbed.h"
 #include "rtos.h"
 #include "C12832.h"
+#define tx_message_jog 0x790
 
 // Using Arduino pin notation
 C12832 lcd(D11, D13, D12, D7, D10);
+RawCAN busCan(PD_0, PD_1, 1000000);
+CANMessage rx_message;
 
-SPI my_spi(PE_6, PE_5, PE_2, PE_4, use_gpio_ssel);
 
-DigitalOut reset_ligne(PC_6, 0);
-DigitalOut ligne_suivante(PF_8, 1);
-int i = 0;
-void next_line();
+EventFlags eflag;
+
+uint32_t read_flag;
+
+
+Thread t1;
+Thread t2;
+void orthtermain(void);
+void reception(void);
+
+bool notifiaction_nouveau_message = false;
 
 int main()
 {
+    char data[2];
+ int n = 0; 
+    t1.start(&orthtermain);
+    t2.start(&reception);
+    CANMessage tx_message_bar(0x7B0, data, 2, CANData, CANStandard);
+    uint16_t motif = 0x0001;
+    while (1)
+    {
 
-    my_spi.select();
-    my_spi.deselect();
-
-    my_spi.frequency(25000000);
-    my_spi.format(8, 0);
-
-    char paquet_tx[7][2] =
+        read_flag = eflag.wait_any(0x01 | 0x10);
+        if (read_flag == 0x10)
         {
-            {0x0E, 0x08},
-            {0x11, 0x0C},
-            {0x10, 0x0A},
-            {0x08, 0x09},
-            {0x04, 0x1F},
-            {0x02, 0x08},
-            {0x1F, 0x08},
-        };
+            n++;
+            if (n > 9)
+            {
+                n = 0;
+            }
+        }
+        if (read_flag == 0x01)
+        {
+            n--;
+            if (n < 0)
+            {
+                n = 9;
+            }
+        }
+        motif = (0x0001 << n);
+        tx_message_bar.data[0] = (uint8_t)(motif >> 8);
+        tx_message_bar.data[1] = (uint8_t)(motif);
+
+        busCan.write(tx_message_bar);
+
+        ThisThread::sleep_for(100ms);
+    }    
+}
+
+void orthtermain(void)
+{
 
     while (1)
     {
-        reset_ligne = 1;
-        wait_us(1);
-        reset_ligne = 0;
+        CANMessage requet(tx_message_jog, CANStandard);
+        busCan.write(requet);
+        ThisThread::sleep_for(200ms);
+    }
+}
 
-        for (size_t i = 0; i < 7; i++)
+void reception(void)
+{
+
+    busCan.attach(
+        []()
         {
-            my_spi.write(paquet_tx[i], 2, nullptr, 0);
-            ligne_suivante = 0;
-            ThisThread::sleep_for(1ms);
-            ligne_suivante = 1;
-        }
+            busCan.read(rx_message);
 
-        ThisThread::sleep_for(3ms);
+            notifiaction_nouveau_message = true;
+        });
+
+    while (1)
+    {
+        if (notifiaction_nouveau_message)
+        {
+
+            if (rx_message.id == 0x791)
+            {
+                switch (rx_message.data[0])
+                {
+                case 0x08:
+                    lcd.locate(0, 0);
+                    lcd.cls();
+                    lcd.printf("Haut");
+
+                    break;
+                case 0x01:
+                    lcd.locate(0, 0);
+                    lcd.cls();
+                    lcd.printf("Bas");
+
+                    break;
+                case 0x10:
+                    lcd.locate(0, 0);
+                    lcd.cls();
+                    lcd.printf("Droite");
+                    eflag.set(0x01);
+                    break;
+                case 0x02:
+                    lcd.locate(0, 0);
+                    lcd.cls();
+                    lcd.printf("Gauche");
+                    eflag.set(0x10);
+                    break;
+                default:
+                    break;
+                }
+            }
+            notifiaction_nouveau_message = false;
+        }
+        ThisThread::sleep_for(200ms);
     }
 }
