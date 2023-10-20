@@ -4,51 +4,81 @@
 #include "mbed.h"
 #include "rtos.h"
 #include "C12832.h"
+#define tx_message_jog 0x790
+#define tx_message_cod 0x7A0
 
 // Using Arduino pin notation
 C12832 lcd(D11, D13, D12, D7, D10);
+RawCAN busCan(PD_0, PD_1, 1000000);
+CANMessage rx_message;
+DigitalOut Rouge(D5);
+DigitalOut Bleu(D8);
+DigitalOut Vert(D9);
 
-SPI my_spi(PE_6, PE_5, PE_2, PE_4, use_gpio_ssel);
 
-DigitalOut reset_ligne(PC_6, 0);
-DigitalOut ligne_suivante(PF_8, 1);
-int i = 0;
-void next_line();
+
+
+
+
+
+
+
+bool notification_nouveau_message = false;
+bool notification_nouveau_trame = false;
+
 
 int main()
 {
 
-    my_spi.select();
-    my_spi.deselect();
-
-    my_spi.frequency(25000000);
-    my_spi.format(8, 0);
-
-    char paquet_tx[7][2] =
+    
+    Rouge = 1;
+    Bleu = 1;
+    Vert = 1;
+   busCan.filter(0x240, 0x7F9, CANStandard, 0);
+    busCan.attach(
+        []()
         {
-            {0x0E, 0x08},
-            {0x11, 0x0C},
-            {0x10, 0x0A},
-            {0x08, 0x09},
-            {0x04, 0x1F},
-            {0x02, 0x08},
-            {0x1F, 0x08},
-        };
+            busCan.read(rx_message, 0);
+           
 
+            notification_nouveau_trame = true;
+        });
     while (1)
     {
-        reset_ligne = 1;
-        wait_us(1);
-        reset_ligne = 0;
-
-        for (size_t i = 0; i < 7; i++)
+ 
+ if(notification_nouveau_trame == true)
+ {
+    notification_nouveau_trame = false;
+    
+        if (rx_message.id == 0x240 && rx_message.data[0] == 0x01)
         {
-            my_spi.write(paquet_tx[i], 2, nullptr, 0);
-            ligne_suivante = 0;
-            ThisThread::sleep_for(1ms);
-            ligne_suivante = 1;
+            Rouge = 0;
+            Bleu = 1;
+            Vert = 1;
+        }
+        else if (rx_message.id == 0x242 && rx_message.data[0] == 0x01)
+        {
+            Bleu = 0;
+            Rouge = 1;
+            Vert = 1;
+        }
+        else if (rx_message.id == 0x244 && rx_message.data[0] == 0x01)
+        {
+            Rouge = 1;
+            Bleu = 1;
+            Vert = 0;
+        }
+        else if (rx_message.id == 0x246 && rx_message.data[0] == 0x01)
+        {
+            Rouge = 1;
+            Bleu = 1;
+            Vert = 1;
         }
 
-        ThisThread::sleep_for(3ms);
+        ThisThread::sleep_for(200ms);
+ }
     }
 }
+
+
+
